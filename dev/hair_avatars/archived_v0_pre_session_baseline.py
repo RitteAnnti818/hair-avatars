@@ -1,26 +1,20 @@
-# Archived: pre-session baseline of `scene/flame_gaussian_model.py` (before 2026-08-21's B work)
+# Archived: scene/flame_gaussian_model.py, state before this session's inextensible-chain (B) work.
+#
+# C1 (strand-chain soft-rigging), C2 (coherence regularization), the motion gate, the
+# chain-propagated strand-rotation ablation, and the periodic-rebinding diagnostic already existed.
+# No enable_inextensible_chain, no clamp, no magnitude/direction-decoupled parameterization yet.
+#
+# Version lineage: this file (v0) -> archived_v1_hard_clamp.py (hard norm-clamp, tested and failed)
+# -> live code in scene/flame_gaussian_model.py (v2, magnitude/direction decoupled, also failed --
+# statistically indistinguishable from v1, see next_steps_plan.md's final verdict).
+#
+# Not meant to run standalone -- this is the class body as it existed, kept for reference only.
 
-**Status: this is the exact state of the file before any of this session's inextensible-chain (B)
-work began — C1 (strand-chain soft-rigging), C2 (coherence regularization), the motion gate, the
-chain-propagated strand-rotation ablation, and the periodic-rebinding diagnostic all already existed,
-but there was no `enable_inextensible_chain`, no `_clamp_norm` (v1), and no magnitude/direction-decoupled
-parameterization (v2) yet. Reconstructed here from the user's own copy (pasted verbatim, confirmed
-byte-for-byte accurate) since, like v1, it was never separately committed before being edited in place —
-see `archived_v1_hard_clamp.md` for the intermediate hard-clamp version that came between this and the
-current v2 code in `scene/flame_gaussian_model.py`.**
-
-Version lineage: **this file (v0, baseline)** → `archived_v1_hard_clamp.md` (v1, hard norm-clamp,
-tested and failed) → live code in `scene/flame_gaussian_model.py` (v2, magnitude/direction decoupled,
-also failed — statistically indistinguishable from v1, see `next_steps_plan.md`'s final verdict).
-
-## The code
-
-```python
-# 
-# Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual 
-# property and proprietary rights in and to this software and related documentation. 
-# Any commercial use, reproduction, disclosure or distribution of this software and 
-# related documentation without an express license agreement from Toyota Motor Europe NV/SA 
+#
+# Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual
+# property and proprietary rights in and to this software and related documentation.
+# Any commercial use, reproduction, disclosure or distribution of this software and
+# related documentation without an express license agreement from Toyota Motor Europe NV/SA
 # is strictly prohibited.
 #
 
@@ -233,7 +227,7 @@ class FlameGaussianModel(GaussianModel):
                 self.flame_param['eyes_pose'][i] = torch.from_numpy(mesh['eyes_pose'])
                 self.flame_param['translation'][i] = torch.from_numpy(mesh['translation'])
                 # self.flame_param['dynamic_offset'][i] = torch.from_numpy(mesh['dynamic_offset'])
-            
+
             for k, v in self.flame_param.items():
                 self.flame_param[k] = v.float().cuda()
 
@@ -249,7 +243,7 @@ class FlameGaussianModel(GaussianModel):
             # NOTE: not sure when this happens
             import ipdb; ipdb.set_trace()
             pass
-    
+
     def update_mesh_by_param_dict(self, flame_param):
         if 'shape' in flame_param:
             shape = flame_param['shape']
@@ -389,12 +383,12 @@ class FlameGaussianModel(GaussianModel):
 
         # for mesh regularization
         self.verts_cano = verts_cano
-    
+
     def compute_dynamic_offset_loss(self):
         # loss_dynamic = (self.flame_param['dynamic_offset'][[self.timestep]] - self.flame_param_orig['dynamic_offset'][[self.timestep]]).norm(dim=-1)
         loss_dynamic = self.flame_param['dynamic_offset'][[self.timestep]].norm(dim=-1)
         return loss_dynamic.mean()
-    
+
     def compute_laplacian_loss(self):
         # offset = self.flame_param['static_offset'] + self.flame_param['dynamic_offset'][[self.timestep]]
         offset = self.flame_param['dynamic_offset'][[self.timestep]]
@@ -407,7 +401,7 @@ class FlameGaussianModel(GaussianModel):
         diff = (lap_wo - lap_w) ** 2
         diff = diff.sum(dim=-1, keepdim=True)
         return diff.mean()
-    
+
     def training_setup(self, training_args):
         super().training_setup(training_args)
 
@@ -452,7 +446,7 @@ class FlameGaussianModel(GaussianModel):
         self.flame_param['translation'].requires_grad = True
         param_trans = {'params': [self.flame_param['translation']], 'lr': training_args.flame_trans_lr, "name": "trans"}
         self.optimizer.add_param_group(param_trans)
-        
+
         # expression
         self.flame_param['expr'].requires_grad = True
         param_expr = {'params': [self.flame_param['expr']], 'lr': training_args.flame_expr_lr, "name": "expr"}
@@ -509,7 +503,7 @@ class FlameGaussianModel(GaussianModel):
                 print(f"[HairAvatars] restored strand_delta from {strand_path}")
             else:
                 print(f"[HairAvatars] WARNING: {strand_path} not found — strand offsets reset to zero")
-        
+
         if 'motion_path' in kwargs and kwargs['motion_path'] is not None:
             # When there is a motion sequence specified, load only dynamic parameters.
             motion_path = Path(kwargs['motion_path'])
@@ -530,7 +524,7 @@ class FlameGaussianModel(GaussianModel):
                 'dynamic_offset': flame_param['dynamic_offset'],
             }
             self.num_timesteps = self.flame_param['expr'].shape[0]  # required by viewers
-        
+
         if 'disable_fid' in kwargs and len(kwargs['disable_fid']) > 0:
             mask = (self.binding[:, None] != kwargs['disable_fid'][None, :]).all(-1)
 
@@ -541,4 +535,3 @@ class FlameGaussianModel(GaussianModel):
             self._scaling = self._scaling[mask]
             self._rotation = self._rotation[mask]
             self._opacity = self._opacity[mask]
-```
