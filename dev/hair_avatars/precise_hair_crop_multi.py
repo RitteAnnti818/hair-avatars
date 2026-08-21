@@ -113,6 +113,17 @@ SUBJECTS = {
         base_dir=f"{PROJECT}/output/free60k_baseline_302/test/ours_60000",
         hair_dir=f"{PROJECT}/output/inext60k_relaxed_302_FREE/test/ours_60000",
     ),
+    # B-2a v3: v2 (magnitude/direction decoupled) inextensible chain, static-only, cap=0.3
+    "306_inextv2": dict(
+        data_dir=f"{PROJECT}/data/306_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_306/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/inextv2_306_FREE/test/ours_60000",
+    ),
+    "302_inextv2": dict(
+        data_dir=f"{PROJECT}/data/302_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_302/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/inextv2_302_FREE/test/ours_60000",
+    ),
     # threshold_strand_coherence sweep on 306 (default 0.1 regressed badly; testing looser values)
     "306_th015": dict(
         data_dir=f"{PROJECT}/data/UNION10_306_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",

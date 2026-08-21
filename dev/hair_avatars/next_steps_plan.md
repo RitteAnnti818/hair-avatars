@@ -50,6 +50,30 @@ outweighed by photometric gradient) structurally rather than via penalty weight.
   deliberately oversized fake deltas (~5.0 magnitude vs. 0.3 cap) get clamped to exactly the cap through
   `_update_strand_delta_cumsum`. No actual training run yet (B-2 below).
 
+**FINAL VERDICT (2026-08-21) — the entire "cap individual link magnitude" family is closed, not just
+v1's specific mechanism.** Three independent parameterizations were tried on 306/302 static-only:
+
+| Variant | 306 | 302 |
+|---|---|---|
+| Free-vector (no cap) | +0.281dB | +0.014dB |
+| v1 hard-clamp, cap=0.3 | +0.050dB | −0.027dB |
+| v1 hard-clamp, cap=0.5 (relaxed) | +0.045dB | −0.051dB |
+| v2 magnitude/direction decoupled, cap=0.3 | +0.054dB | −0.025dB |
+
+v2 was designed specifically to fix a gradient-entanglement pathology found in v1 (direction gradient
+decaying as raw norm grows past the cap, verified numerically — see `archived_v1_hard_clamp.md`), using
+a completely different parameterization (sigmoid-gated scalar magnitude + rotation-based direction,
+gradient-verified to not decay the same way). **Result: statistically indistinguishable from v1**
+(306: +0.054 vs +0.050dB; 302: −0.025 vs −0.027dB, both well within each run's reported std of
+0.30–0.42dB). Since three independently-implemented mechanisms converge to the same narrow band
+regardless of how the cap is enforced, the gradient-entanglement hypothesis is very unlikely to be the
+real explanation — the far simpler, better-supported conclusion is that **structurally capping a
+single link's magnitude at ~0.3, by any mechanism, trades away real capacity the free-vector model was
+using productively, not just the comet-tail failure mode.** This closes the norm-cap family (hard, soft,
+decoupled) as a dead end for B — not merely "needs a better implementation." See
+`archived_v1_hard_clamp.md` for the superseded v1 code and gradient analysis. **Recommendation: do not
+pursue further variants in this family; proceed to A (optical-flow / temporal supervision, below).**
+
 **Built-in sanity signature for the first real training run**: with
 `inextensible_static_cap == threshold_strand_static`, `losses['strand_static']` (train.py's ReLU
 penalty) should be provably ~0 for the entire run, since the clamp already guarantees
