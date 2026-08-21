@@ -140,3 +140,11 @@ dmypy.json
 
 # meta data in macOS
 .DS_Store
+
+# HairAvatars project additions: large / regenerable / license-restricted, never commit
+/data/
+flame_model/assets/**/*.pkl
+dev/hair_avatars/videos/
+dev/hair_avatars/qual_videos/
+*.csv
+*.out

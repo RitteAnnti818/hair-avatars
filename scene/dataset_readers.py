@@ -294,13 +294,26 @@ def readMeshesFromTransforms(path, transformsfile):
             mesh_infos[frame["timestep_index"]] = flame_param
     return mesh_infos
 
-def readDynamicNerfInfo(path, white_background, eval, extension=".png", target_path=""):
+def subsample_cameras(cam_infos, n_train_cameras):
+    """Evenly subsample a subset of camera views by camera_id (index), keeping all timesteps."""
+    if n_train_cameras is None or n_train_cameras <= 0:
+        return cam_infos
+    unique_ids = sorted(set(c.camera_id for c in cam_infos if c.camera_id is not None))
+    if n_train_cameras >= len(unique_ids):
+        return cam_infos
+    idx = np.linspace(0, len(unique_ids) - 1, n_train_cameras).round().astype(int)
+    keep_ids = set(unique_ids[i] for i in idx)
+    print(f"Subsampling training views: {len(unique_ids)} -> {len(keep_ids)} cameras {sorted(keep_ids)}")
+    return [c for c in cam_infos if c.camera_id in keep_ids]
+
+def readDynamicNerfInfo(path, white_background, eval, extension=".png", target_path="", n_train_cameras=-1):
     print("Reading Training Transforms")
     if target_path != "":
         train_cam_infos = readCamerasFromTransforms(target_path, "transforms_train.json", white_background, extension)
     else:
         train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
-    
+    train_cam_infos = subsample_cameras(train_cam_infos, n_train_cameras)
+
     print("Reading Training Meshes")
     train_mesh_infos = readMeshesFromTransforms(path, "transforms_train.json")
     if target_path != "":

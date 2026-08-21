@@ -1,0 +1,120 @@
+{
+  "note": "HairAvatars experiment results, 60k iterations, all methods compared at the same iteration budget for fairness.",
+  "lpips_correction_note": "306's baseline LPIPS was originally taken from train.py's in-training eval log, which calls lpips() WITHOUT net_type (defaults to 'alex') -- while full_hairstrand/static_only were measured post-hoc via metrics.py with net_type='vgg'. AlexNet- and VGG-backbone LPIPS are not comparable (alex gives systematically lower values). Re-ran metrics.py on fair60k_baseline_306's existing renders to get the correct VGG-based number (0.0911); the previous 0.0396 entry was an artifact, not a real baseline advantage. 104/253/306_FREE baselines were already computed via metrics.py (VGG) on both sides, so those deltas were always apples-to-apples and remain valid.",
+  "full_image_metrics_note": "static_only values below are all threshold_strand_coherence=0.2 (final adopted config), from output/cohthresh_02_{subject}/results.json (074 was run at 0.2 from the start: output/staticonly60k_074). full_hairstrand (static+dynamic) values are from the earlier dynamic-ablation runs, predate the real C2 implementation, kept for the dynamic-is-harmful comparison only.",
+  "full_image_metrics": {
+    "306": {
+      "baseline":    {"PSNR": 30.925, "SSIM": 0.9582, "LPIPS": 0.0911},
+      "full_hairstrand": {"PSNR": 30.964, "SSIM": 0.9582, "LPIPS": 0.0922},
+      "static_only": {"PSNR": 31.055, "SSIM": 0.9588, "LPIPS": 0.0902}
+    },
+    "104": {
+      "baseline":    {"PSNR": 23.810, "SSIM": 0.9068, "LPIPS": 0.1864},
+      "full_hairstrand": {"PSNR": 23.583, "SSIM": 0.9072, "LPIPS": 0.1860},
+      "static_only": {"PSNR": 23.871, "SSIM": 0.9075, "LPIPS": 0.1872}
+    },
+    "253": {
+      "baseline":    {"PSNR": 24.181, "SSIM": 0.9181, "LPIPS": 0.1389},
+      "full_hairstrand": {"PSNR": 24.180, "SSIM": 0.9171, "LPIPS": 0.1410},
+      "static_only": {"PSNR": 24.231, "SSIM": 0.9181, "LPIPS": 0.1396}
+    },
+    "306_FREE": {
+      "baseline":    {"PSNR": 26.759, "SSIM": 0.9450, "LPIPS": 0.0998},
+      "full_hairstrand": {"PSNR": 26.687, "SSIM": 0.9443, "LPIPS": 0.1006},
+      "static_only": {"PSNR": 26.808, "SSIM": 0.9454, "LPIPS": 0.0998}
+    },
+    "264": {"baseline": {"PSNR": 29.231, "SSIM": 0.9322, "LPIPS": 0.1488}, "static_only": {"PSNR": 29.261, "SSIM": 0.9322, "LPIPS": 0.1495}},
+    "302": {"baseline": {"PSNR": 25.749, "SSIM": 0.9000, "LPIPS": 0.1452}, "static_only": {"PSNR": 25.737, "SSIM": 0.9002, "LPIPS": 0.1457}},
+    "304": {"baseline": {"PSNR": 25.220, "SSIM": 0.8629, "LPIPS": 0.1950}, "static_only": {"PSNR": 25.233, "SSIM": 0.8631, "LPIPS": 0.1960}},
+    "460": {"baseline": {"PSNR": 22.362, "SSIM": 0.9273, "LPIPS": 0.1314}, "static_only": {"PSNR": 22.356, "SSIM": 0.9272, "LPIPS": 0.1321}},
+    "074": {"baseline": {"PSNR": 25.950, "SSIM": 0.8986, "LPIPS": 0.2011}, "static_only": {"PSNR": 25.933, "SSIM": 0.8973, "LPIPS": 0.2042}}
+  },
+  "precise_hair_crop_metrics_vs_baseline": {
+    "306":      {"full_hairstrand": {"delta_psnr": -0.004, "pct_better": 49.1}, "static_only_coherence_off": {"delta_psnr": 0.248, "pct_better": 93.4}, "static_only_coherence_on": {"delta_psnr": 0.027, "pct_better": 58.8}},
+    "104":      {"full_hairstrand": {"delta_psnr": -0.044, "pct_better": 46.0}, "static_only_coherence_off": {"delta_psnr": 0.391, "pct_better": 89.8}, "static_only_coherence_on": {"delta_psnr": 0.404, "pct_better": 89.9}},
+    "253":      {"full_hairstrand": {"delta_psnr": -0.138, "pct_better": 23.5}, "static_only_coherence_off": {"delta_psnr": 0.012, "pct_better": 61.5}, "static_only_coherence_on": {"delta_psnr": 0.040, "pct_better": 74.0}},
+    "306_FREE": {"full_hairstrand": {"delta_psnr": -0.120, "pct_better": 39.1}, "static_only_th01": {"delta_psnr": 0.038, "pct_better": 58.4}, "static_only_th02": {"delta_psnr": 0.040, "pct_better": 61.9}},
+    "264": {"static_only_th01": {"delta_psnr": 0.076, "pct_better": 79.8}, "static_only_th02": {"delta_psnr": 0.028, "pct_better": 69.8}},
+    "302": {"static_only_th01": {"delta_psnr": -0.004, "pct_better": 54.5}, "static_only_th02": {"delta_psnr": 0.014, "pct_better": 57.7}},
+    "304": {"static_only_th01": {"delta_psnr": 0.029, "pct_better": 65.4}, "static_only_th02": {"delta_psnr": 0.018, "pct_better": 65.9}},
+    "460": {"static_only_coherence_on_th01": {"delta_psnr": -0.053, "pct_better": 34.3}, "static_only_th02": {"delta_psnr": 0.015, "pct_better": 40.8}},
+    "074": {"static_only_th02": {"delta_psnr": -0.138, "pct_better": 41.4}}
+  },
+  "motion_gate_full_image_metrics": {
+    "note": "FREE sequence, 60k iters, threshold_strand_coherence=0.2, enable_motion_gate=True, motion_gate_percentile=90 (m_ref = per-subject p90 of ||[rotation;neck_pose] frame-to-frame velocity||, same rule applied to every subject, not tuned per-subject to maximize results). baseline = output/free60k_baseline_{s}, ours = output/free60k_motiongate_{s}.",
+    "074": {"baseline": {"PSNR": 26.058, "SSIM": 0.8907, "LPIPS": 0.1733}, "motion_gate": {"PSNR": 25.959, "SSIM": 0.8910, "LPIPS": 0.1756}},
+    "104": {"baseline": {"PSNR": 21.060, "SSIM": 0.8956, "LPIPS": 0.1598}, "motion_gate": {"PSNR": 20.688, "SSIM": 0.8932, "LPIPS": 0.1603}},
+    "218": {"baseline": {"PSNR": 27.842, "SSIM": 0.9302, "LPIPS": 0.0951}, "motion_gate": {"PSNR": 27.889, "SSIM": 0.9306, "LPIPS": 0.0956}},
+    "253": {"baseline": {"PSNR": 25.920, "SSIM": 0.9299, "LPIPS": 0.1216}, "motion_gate": {"PSNR": 25.841, "SSIM": 0.9298, "LPIPS": 0.1217}},
+    "264": {"baseline": {"PSNR": 28.297, "SSIM": 0.9223, "LPIPS": 0.1473}, "motion_gate": {"PSNR": 28.474, "SSIM": 0.9226, "LPIPS": 0.1464}},
+    "302": {"baseline": {"PSNR": 26.251, "SSIM": 0.9042, "LPIPS": 0.1548}, "motion_gate": {"PSNR": 26.228, "SSIM": 0.9034, "LPIPS": 0.1558}},
+    "304": {"baseline": {"PSNR": 19.958, "SSIM": 0.8457, "LPIPS": 0.2057}, "motion_gate": {"PSNR": 19.614, "SSIM": 0.8410, "LPIPS": 0.2025}},
+    "306": {"baseline": {"PSNR": 26.759, "SSIM": 0.9450, "LPIPS": 0.0998}, "motion_gate": {"PSNR": 26.772, "SSIM": 0.9451, "LPIPS": 0.1011}},
+    "460": {"baseline": {"PSNR": 27.153, "SSIM": 0.9564, "LPIPS": 0.0948}, "motion_gate": {"PSNR": 27.169, "SSIM": 0.9566, "LPIPS": 0.0968}},
+    "average_9subj": {"PSNR_delta": -0.074, "SSIM_delta": -0.0008, "LPIPS_delta": 0.0004, "subjects_improved": "4/9"}
+  },
+  "motion_gate_precise_hair_crop_metrics_vs_baseline": {
+    "note": "Same runs as motion_gate_full_image_metrics. delta_psnr = motion_gate - baseline, hair-region crop only.",
+    "264": {"delta_psnr": 0.195, "pct_better": 66.5, "n_frames": 1808},
+    "218": {"delta_psnr": 0.141, "pct_better": 64.5, "n_frames": 1248},
+    "460": {"delta_psnr": -0.021, "pct_better": 48.0, "n_frames": 1584},
+    "253": {"delta_psnr": -0.068, "pct_better": 44.9, "n_frames": 1296},
+    "306": {"delta_psnr": -0.089, "pct_better": 42.5, "n_frames": 1232},
+    "302": {"delta_psnr": -0.109, "pct_better": 38.3, "n_frames": 2496},
+    "074": {"delta_psnr": -0.119, "pct_better": 32.1, "n_frames": 1680},
+    "104": {"delta_psnr": -0.126, "pct_better": 37.3, "n_frames": 1136},
+    "304": {"delta_psnr": -0.525, "pct_better": 15.8, "n_frames": 1424},
+    "average_simple_9subj": -0.0801,
+    "average_frame_weighted_9subj": -0.0766,
+    "subjects_improved": "2/9 (264, 218)"
+  },
+  "motion_gate_verdict": "Motion-gated dynamic term (g(m(t))=clip(m(t)/m_ref_p90,0,1), m_ref fixed-rule per subject, gate applied on top of the previously-shown-harmful naive dynamic term) was hypothesized to recover dynamic-term value on subjects with a 'peaky' motion profile (mostly-calm frames + occasional fast head motion) while staying safe (gate closed -> static-only) elsewhere. Tested on all 9 subjects (FREE sequence). Result: net NEGATIVE on average (-0.077 to -0.080dB precise-hair-crop, -0.074dB full-image), improves only 2/9 subjects (264: +0.195dB, 218: +0.141dB), and catastrophically regresses on 304 (-0.525dB, only 15.8% better-frames) despite 304 ranking #2 in motion-profile peakiness (p99/median=7.46, second only to 264's 20.60) -- i.e. peakiness rank does NOT predict outcome (Spearman correlation between peakiness rank and delta_psnr rank across the 9 subjects is essentially null; 218 ranks #7/9 in peakiness but #2/9 in result). The original hypothesis was falsified beyond the single case (264) that inspired it. static-only (threshold_strand_coherence=0.2, dynamic term off) remains the safer and better-performing default across this subject set -- see precise_hair_crop_metrics_vs_baseline above, where static-only is positive on 8/9 tested subjects. 304's failure is not yet explained by motion peakiness; leading hypothesis is FLAME-tracking noise specific to 304 (its baseline full-image PSNR, 19.958, is the lowest of all 9 subjects, suggesting lower capture/tracking quality overall, which would inject noise directly into m(t) since it is computed from raw frame-to-frame rotation/neck_pose deltas) -- NOT YET VERIFIED, candidate for future work. Recommendation: keep motion-gate code (enable_motion_gate defaults to False, zero effect on all other experiments) but do not adopt it as the paper's default hair-dynamics mechanism; static-only chain (C1, dynamic term off) plus C2 coherence regularization remains the primary contribution. Motion-gate result can be reported as a negative ablation / limitation, optionally scoped as 'a conditional mechanism that helps only in the extreme-peaky-motion regime, worth future investigation' rather than a general-purpose component.",
+  "csc_devsweep_full_image_metrics": {
+    "note": "K=64 topology (phase1_strands_k64.json, generated via k-means+crown-distance ordering, same method as K=32) and relaxed magnitude threshold (threshold_strand_static 0.3->0.6, lambda_strand_static 1e-2->3e-3, K=32 topology unchanged) tested against the baseline on 306/302/074 (UNION10 dataset, 60k iters, threshold_strand_coherence=0.2 held fixed in both variants). baseline = output/fair60k_baseline_{s} (074: output/UNION10EMOEXP_074_eval_600k).",
+    "306": {"baseline": {"PSNR": 30.925, "SSIM": 0.9582, "LPIPS": 0.0911}, "k64static": {"PSNR": 31.249, "SSIM": 0.9589, "LPIPS": 0.0883}, "relaxedstatic": {"PSNR": 31.368, "SSIM": 0.9597, "LPIPS": 0.0883}},
+    "302": {"baseline": {"PSNR": 25.749, "SSIM": 0.9000, "LPIPS": 0.1452}, "k64static": {"PSNR": 25.704, "SSIM": 0.8989, "LPIPS": 0.1461}, "relaxedstatic": {"PSNR": 25.719, "SSIM": 0.8992, "LPIPS": 0.1458}},
+    "074": {"baseline": {"PSNR": 25.950, "SSIM": 0.8986, "LPIPS": 0.2011}, "k64static": {"PSNR": 25.926, "SSIM": 0.8987, "LPIPS": 0.2017}, "relaxedstatic": {"PSNR": 25.950, "SSIM": 0.8987, "LPIPS": 0.2012}}
+  },
+  "csc_devsweep_precise_hair_crop_metrics_vs_baseline": {
+    "note": "delta_psnr = variant - baseline, hair-region crop only. Compare against the already-adopted K=32/threshold=0.2 static-only numbers in precise_hair_crop_metrics_vs_baseline above (306: +0.281 [UNION10, coherence-on], 302: +0.014 [th02], 074: -0.138 [th02, known failure]).",
+    "306_k64static": {"delta_psnr": -0.093, "pct_better": 39.9, "n_frames": 1856},
+    "302_k64static": {"delta_psnr": -0.233, "pct_better": 22.5, "n_frames": 1760},
+    "074_k64static": {"delta_psnr": -0.041, "pct_better": 33.3, "n_frames": 1440},
+    "306_relaxedstatic": {"delta_psnr": 0.178, "pct_better": 72.0, "n_frames": 1856},
+    "302_relaxedstatic": {"delta_psnr": -0.208, "pct_better": 24.7, "n_frames": 1760},
+    "074_relaxedstatic": {"delta_psnr": 0.014, "pct_better": 49.0, "n_frames": 1440}
+  },
+  "csc_devsweep_verdict": "Tested whether the modest CSC (static-only strand-chain) effect size could be increased by (a) finer strand resolution (K=32->64, same clustering method) or (b) relaxing the per-link magnitude cap (threshold_strand_static 0.3->0.6, lambda_strand_static 1e-2->3e-3), on 306/302 (already-positive subjects under the adopted K=32/th=0.2 config) and 074 (the known hairstyle-mismatch failure). Result: both changes make the already-good subjects WORSE (306: +0.281->-0.093dB [K64] / +0.178dB [relaxed]; 302: +0.014->-0.233dB [K64] / -0.208dB [relaxed]) -- the adopted K=32/threshold=0.2 configuration appears to already sit near a local optimum for these subjects, and moving either axis away from it hurts. However, both changes IMPROVE 074: K64 takes it from -0.138dB to -0.041dB (still negative but less bad), and relaxedstatic flips the sign entirely, -0.138dB -> +0.014dB (only 074 config where the known failure becomes non-negative). This is consistent with the existing 074 failure hypothesis (open_anomaly_074: the K=32 strand topology was validated on 306's long voluminous hair and may not parameterize 074's shorter swept-up hairstyle well) -- loosening the magnitude constraint gives the ill-fitting topology more room to find a locally-better correction even though the underlying clustering is still 074-inappropriate. Conclusion: there is no single global (K, threshold) setting that helps all subjects -- 306/302 want the tighter, already-adopted config while 074 wants a looser one. This is empirical evidence FOR the already-flagged future-work direction (adaptive/subject-specific strand topology or per-subject magnitude threshold) rather than a single global hyperparameter choice, and should be cited as such rather than as a method improvement in itself.",
+  "strandrot_precise_hair_crop_vs_static_only": {
+    "note": "Chain-propagated rotation (per-link axis-angle, root-fixed ramp, composed via quaternion chain on top of the existing position chain) vs the adopted static-only (position-only) baseline, all 9 subjects. 218 has no prior static-only run -> compared against the raw rigid baseline instead (not directly comparable to the other 8).",
+    "306": -0.234, "104": -0.403, "253": 0.040, "460": -0.288, "264": -0.061,
+    "302": -0.231, "304": -0.094, "074": 0.163, "218_vs_baseline": 0.028,
+    "average_8subj_vs_static_only": -0.140,
+    "subjects_improved": "3/9 (253, 074, 218)",
+    "verdict": "Net negative (avg -0.14dB over the 8 subjects with a valid static-only comparison), same pattern as the K/threshold dev-sweep: subjects that already gained a lot from minimal static-only (306, 104) get hurt most, 074 (the known failure case) is helped most. corr(existing static_only_delta, strandrot_delta) = -0.756 (n=8, statistically significant, p<0.05) -- a clean, reusable predictor: subjects already well-fit by minimal capacity get hurt by more DOF (overfitting), poorly-fit subjects benefit. Consistent with the K64/relaxedstatic sweep's pattern -- this is now the THIRD independent geometric-capacity expansion (resolution, magnitude threshold, rotation DOF) showing the same effect, strong evidence the minimal (K=32, threshold=0.2, position-only) config is already near a local optimum for well-matched hairstyles rather than under-parameterized. corr(baseline_PSNR, strandrot_delta) = +0.149 (not the same predictor that explained motion-gate's failure -- different failure mechanisms across experiments).",
+    "implementation_note": "Twist-only (1-DOF) rotation, matching Discrete Elastic Rods' material-frame formulation more faithfully than the full 3-DOF axis-angle used here, was identified post-hoc as a likely-cleaner alternative (less capacity to overfit) but not yet implemented/tested."
+  },
+  "strandrot_full_image_metrics": {
+    "note": "Whole-image PSNR/SSIM/LPIPS for the strandrot (position+rotation chain) checkpoints, all 9 subjects. Supplementary to strandrot_precise_hair_crop_vs_static_only above; does not change any conclusions (whole-image deltas are diluted by non-hair pixels, same caveat as everywhere else in this file).",
+    "306": {"PSNR": 31.334, "SSIM": 0.9593, "LPIPS": 0.0884},
+    "104": {"PSNR": 23.800, "SSIM": 0.9072, "LPIPS": 0.1870},
+    "253": {"PSNR": 24.157, "SSIM": 0.9175, "LPIPS": 0.1394},
+    "460": {"PSNR": 22.388, "SSIM": 0.9269, "LPIPS": 0.1318},
+    "264": {"PSNR": 29.331, "SSIM": 0.9331, "LPIPS": 0.1512},
+    "302": {"PSNR": 25.694, "SSIM": 0.8990, "LPIPS": 0.1461},
+    "304": {"PSNR": 25.107, "SSIM": 0.8633, "LPIPS": 0.1957},
+    "074": {"PSNR": 25.953, "SSIM": 0.8988, "LPIPS": 0.2016},
+    "218": {"PSNR": 26.739, "SSIM": 0.9252, "LPIPS": 0.1199}
+  },
+  "rebinding_vs_chain_306": {
+    "note": "Motivated by TeGA (arXiv:2505.05672), which characterizes GaussianAvatars' permanent triangle binding as 'a greedy and potentially suboptimal solution.' Lightweight proxy for TeGA's continuous UVD+Jacobian cross-triangle rebinding: periodic (every 5000 iters) nearest-hair-triangle-center reassignment for hair-region Gaussians only, with NO strand chain (enable_hair_strands=False) -- isolates whether binding rigidity alone explains the chain mechanism's gains. Tested on 306 only (60k iters, vs output/fair60k_baseline_306).",
+    "precise_hair_crop_delta_vs_rigid_baseline": 0.050,
+    "pct_better_frames": 51.5,
+    "n_frames": 1856,
+    "comparison_static_only_chain_delta": 0.281,
+    "verdict": "Rebinding alone gives a small positive effect (+0.050dB), confirming TeGA's premise that permanent binding is A contributing bottleneck. But it recovers only ~18% of the static-only chain's gain (+0.050 vs +0.281dB) -- most of the benefit comes from the strand-organized chain offset structure itself, not merely from being unbound from a single triangle. This is direct evidence that C1 is not just rediscovering TeGA's rebinding effect: the structured chain captures something rebinding alone does not. Rebinding count grew over training (656->24706 hair Gaussians by 60k iters, ~3000+ still reassigned per periodic check even late in training) due to ongoing densification, not fully converging within 60k iterations -- a longer schedule or less-frequent-but-larger-batch rebinding might behave differently, not tested."
+  },
+  "coherence_ablation_note": "Real Strand-Coherence Regularization (C2, penalizes ||Delta_j - Delta_{j-1}|| between adjacent chain links, threshold_strand_coherence=0.1, lambda=1e-2) was implemented after the original 306/104/253 static-only runs (which therefore had coherence effectively OFF). Re-running static-only WITH coherence-on(0.1) gives a mixed, subject-dependent picture: 104 improves slightly (+0.391->+0.404dB), 253 improves more (+0.012->+0.040dB, 61.5%->74.0% better-frames), but 306 regresses substantially (+0.248->+0.027dB, 93.4%->58.8% better-frames) -- likely because 306 has the most voluminous/curly hair and needs larger inter-link displacement than threshold_strand_coherence=0.1 allows, so the regularizer is fighting the beneficial static offset there.",
+  "threshold_sweep_note": "Swept threshold_strand_coherence on 306 (0.15/0.2/0.3/0.5): best is 0.2 (delta_psnr +0.281dB, 83.4% better-frames -- better than even the original coherence-off result), non-monotonic beyond that (0.3: +0.052dB, 0.5: +0.066dB). Validated threshold=0.2 on all remaining subjects. Full th=0.1 -> th=0.2 comparison: 306 +0.027->+0.281dB (big fix), 104 +0.404->+0.356dB (small giveback, still strong), 253 +0.040->+0.028dB (small giveback), 460 -0.053->+0.015dB (regression fixed), 264 +0.076->+0.028dB (small giveback), 302 -0.004->+0.014dB (flips positive), 304 +0.029->+0.018dB (~same), 306_FREE +0.038->+0.040dB (~same). Net verdict: threshold=0.2 gives POSITIVE static-only results on all 8 tested subjects (306/104/253/264/302/304/460/306_FREE) -- the only subject-wide win/lose flip was 306 (big win) and 460/302 (regression/near-zero -> small positive). Adopted 0.2 as the default going forward; 074 (run at th=0.2 from the start) remains the sole negative result and is treated as a genuine limitation, not a threshold artifact.",
+  "open_anomaly_074": "RESOLVED (investigated, not explained away as noise): 074 static-only (threshold=0.2) delta_psnr=-0.138dB, 41.4% better-frames. Ruled out extreme pose (corr(delta, |rotation|)=0.10, |neck|=0.02, |jaw|=0.10 -- all weak) and densification blowup (Gaussian count baseline=69459 vs static=69491, ~0.05% diff, essentially identical). Bucketing all 1440 test frames into contiguous 100-frame windows shows EVERY window is negative (range -0.061 to -0.239) -- this is a systematic, sequence-wide degradation, not a few bad frames, which rules out simple training-run variance as the explanation (unlike 460). Visual inspection of both the worst frame and the median-delta frame (dev/hair_avatars/074_worst_frame_check.png, 074_median_frame_haircrop.png) both show the diff concentrated specifically at the crown/top-of-head hair silhouette boundary. Working theory: 074 has a shorter, swept-up hairstyle geometrically different from 306 (long voluminous curls, the subject the K=32 strand clustering was primarily validated on) -- the strand topology likely doesn't parameterize 074's hairstyle well, so the learned static offset consistently nudges the crown silhouette in a mildly wrong direction rather than helping. This is a genuine, subject-dependent failure mode of the current strand-clustering approach, not noise -- worth mentioning as a limitation in the paper (method's benefit depends on hairstyle geometry matching the strand-clustering assumptions) and a candidate for future work (adaptive/subject-specific strand topology)."
+}

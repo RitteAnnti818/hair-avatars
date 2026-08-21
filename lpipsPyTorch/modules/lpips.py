@@ -33,4 +33,6 @@ class LPIPS(nn.Module):
         diff = [(fx - fy) ** 2 for fx, fy in zip(feat_x, feat_y)]
         res = [l(d).mean((2, 3), True) for d, l in zip(diff, self.lin)]
 
-        return torch.sum(torch.cat(res, 0), 0, True)
+        # stack on a new leading dim (layers) instead of cat on dim=0 (batch) -- the
+        # previous cat+sum silently mixed the batch and layer axes for batch size > 1.
+        return torch.stack(res, dim=0).sum(dim=0)

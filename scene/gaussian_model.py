@@ -134,8 +134,23 @@ class GaussianModel:
             # always need to normalize the rotation quaternions before chaining them
             rot = self.rotation_activation(self._rotation)
             face_orien_quat = self.rotation_activation(self.face_orien_quat[self.binding])
-            return quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(face_orien_quat), quat_wxyz_to_xyzw(rot)))  # roma
+            composed = quat_product(quat_wxyz_to_xyzw(face_orien_quat), quat_wxyz_to_xyzw(rot))  # xyzw, roma
             # return quaternion_multiply(face_orien_quat, rot)  # pytorch3d
+
+            # HairAvatars: chain-propagated strand rotation, composed on top of the rigid+local rotation
+            # above (world-space application, after face_orien_quat). No-op (opt-in) unless enabled.
+            face_strand_id = getattr(self, 'face_strand_id', None)
+            strand_rotation_cumprod = getattr(self, 'strand_rotation_cumprod', None)
+            if face_strand_id is not None and strand_rotation_cumprod is not None:
+                strand_id = face_strand_id[self.binding]
+                mask = strand_id >= 0
+                if mask.any():
+                    chain_pos = self.face_chain_pos[self.binding]
+                    strand_quat = strand_rotation_cumprod[strand_id[mask].clamp(min=0), chain_pos[mask]]  # (M,4) xyzw
+                    composed = composed.clone()
+                    composed[mask] = quat_product(strand_quat, composed[mask])
+
+            return quat_xyzw_to_wxyz(composed)
     
     @property
     def get_xyz(self):
@@ -147,7 +162,26 @@ class GaussianModel:
                 self.select_mesh_by_timestep(0)
             
             xyz = torch.bmm(self.face_orien_mat[self.binding], self._xyz[..., None]).squeeze(-1)
-            return xyz * self.face_scaling[self.binding] + self.face_center[self.binding]
+            xyz = xyz * self.face_scaling[self.binding] + self.face_center[self.binding]
+
+            # HairAvatars: soft-rigged strand offset, R_i(t) . Delta_j(t), added on top of the
+            # fully-rigid position above. No-op (opt-in) unless strand topology was loaded.
+            face_strand_id = getattr(self, 'face_strand_id', None)
+            strand_delta_cumsum = getattr(self, 'strand_delta_cumsum', None)
+            if face_strand_id is not None and strand_delta_cumsum is not None:
+                strand_id = face_strand_id[self.binding]
+                mask = strand_id >= 0
+                if mask.any():
+                    chain_pos = self.face_chain_pos[self.binding]
+                    local_delta = strand_delta_cumsum[strand_id[mask].clamp(min=0), chain_pos[mask]]  # (M, 3)
+                    global_delta = torch.bmm(self.face_orien_mat[self.binding][mask], local_delta[..., None]).squeeze(-1)
+                    # local_delta is in triangle-relative units (same convention as _xyz), so it must
+                    # be scaled by k_i just like the rigid term above -- this was previously missing,
+                    # making the threshold's effective freedom depend on each triangle's absolute scale.
+                    global_delta = global_delta * self.face_scaling[self.binding][mask]
+                    xyz = xyz.clone()
+                    xyz[mask] = xyz[mask] + global_delta
+            return xyz
 
     @property
     def get_features(self):

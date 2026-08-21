@@ -32,18 +32,26 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, num_workers=8):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     if dataset.bind_to_mesh:
-        gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset, dataset.not_finetune_flame_params)
+        gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset, dataset.not_finetune_flame_params,
+                                        enable_hair_strands=dataset.enable_hair_strands, strand_json_path=dataset.strand_json_path,
+                                        disable_strand_dynamic=dataset.disable_strand_dynamic,
+                                        enable_motion_gate=dataset.enable_motion_gate, motion_gate_percentile=dataset.motion_gate_percentile,
+                                        enable_strand_rotation=dataset.enable_strand_rotation,
+                                        enable_rebinding=dataset.enable_rebinding,
+                                        enable_inextensible_chain=dataset.enable_inextensible_chain,
+                                        inextensible_static_cap=dataset.inextensible_static_cap,
+                                        inextensible_dynamic_cap=dataset.inextensible_dynamic_cap)
         mesh_renderer = NVDiffRenderer()
     else:
         gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
     if checkpoint:
-        (model_params, first_iter) = torch.load(checkpoint)
+        (model_params, first_iter) = torch.load(checkpoint, weights_only=False)
         gaussians.restore(model_params, opt)
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
@@ -52,7 +60,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
 
-    loader_camera_train = DataLoader(scene.getTrainCameras(), batch_size=None, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
+    loader_camera_train = DataLoader(scene.getTrainCameras(), batch_size=None, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=(num_workers > 0))
     iter_camera_train = iter(loader_camera_train)
     # viewpoint_stack = None
     ema_loss_for_log = 0.0
@@ -109,59 +117,124 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration % 1000 == 0:
             gaussians.oneupSHdegree()
 
-        try:
-            viewpoint_cam = next(iter_camera_train)
-        except StopIteration:
-            iter_camera_train = iter(loader_camera_train)
-            viewpoint_cam = next(iter_camera_train)
-
-        if gaussians.binding != None:
-            gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)
-
-        # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
-        render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-        # Loss
-        gt_image = viewpoint_cam.original_image.cuda()
+        # Gradient accumulation: render+backward `grad_accum_steps` single-view samples before the
+        # optimizer step below, since the rasterizer/mesh state (select_mesh_by_timestep) only supports
+        # one view/timestep per render call. grad_accum_steps=1 (default) reproduces the exact previous
+        # per-iteration behavior. `iteration` still counts optimizer steps, not individual renders, so
+        # all iteration-gated schedules (LR, SH degree, densification, checkpointing) are unaffected.
+        grad_accum_steps = max(1, opt.gradient_accumulation_steps)
+        for _sub_step in range(grad_accum_steps):
+            try:
+                viewpoint_cam = next(iter_camera_train)
+            except StopIteration:
+                iter_camera_train = iter(loader_camera_train)
+                viewpoint_cam = next(iter_camera_train)
 
-        losses = {}
-        losses['l1'] = l1_loss(image, gt_image) * (1.0 - opt.lambda_dssim)
-        losses['ssim'] = (1.0 - ssim(image, gt_image)) * opt.lambda_dssim
+            if gaussians.binding != None:
+                gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)
 
-        if gaussians.binding != None:
-            if opt.metric_xyz:
-                losses['xyz'] = F.relu((gaussians._xyz*gaussians.face_scaling[gaussians.binding])[visibility_filter] - opt.threshold_xyz).norm(dim=1).mean() * opt.lambda_xyz
-            else:
-                # losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
-                losses['xyz'] = F.relu(gaussians._xyz[visibility_filter].norm(dim=1) - opt.threshold_xyz).mean() * opt.lambda_xyz
+            # Render
+            render_pkg = render(viewpoint_cam, gaussians, pipe, background)
+            image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-            if opt.lambda_scale != 0:
-                if opt.metric_scale:
-                    losses['scale'] = F.relu(gaussians.get_scaling[visibility_filter] - opt.threshold_scale).norm(dim=1).mean() * opt.lambda_scale
+            # Loss
+            gt_image = viewpoint_cam.original_image.cuda()
+
+            losses = {}
+            losses['l1'] = l1_loss(image, gt_image) * (1.0 - opt.lambda_dssim)
+            losses['ssim'] = (1.0 - ssim(image, gt_image)) * opt.lambda_dssim
+
+            if gaussians.binding != None:
+                # Guard against views where zero Gaussians pass the visibility filter (can happen
+                # early in training with a sparse initial point cloud + an extreme camera angle,
+                # e.g. profile/back-of-head views in HAIR sequences). `tensor[empty_mask].mean()`
+                # is NaN in PyTorch, which then poisons every parameter via backward() and never
+                # recovers. Skip these visibility-filtered regularizers for that iteration instead.
+                n_visible = visibility_filter.sum()
+
+                if opt.metric_xyz:
+                    if n_visible > 0:
+                        losses['xyz'] = F.relu((gaussians._xyz*gaussians.face_scaling[gaussians.binding])[visibility_filter] - opt.threshold_xyz).norm(dim=1).mean() * opt.lambda_xyz
+                    else:
+                        losses['xyz'] = torch.zeros((), device=gaussians._xyz.device)
                 else:
-                    # losses['scale'] = F.relu(gaussians._scaling).norm(dim=1).mean() * opt.lambda_scale
-                    losses['scale'] = F.relu(torch.exp(gaussians._scaling[visibility_filter]) - opt.threshold_scale).norm(dim=1).mean() * opt.lambda_scale
+                    # losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
+                    if n_visible > 0:
+                        losses['xyz'] = F.relu(gaussians._xyz[visibility_filter].norm(dim=1) - opt.threshold_xyz).mean() * opt.lambda_xyz
+                    else:
+                        losses['xyz'] = torch.zeros((), device=gaussians._xyz.device)
 
-            if opt.lambda_dynamic_offset != 0:
-                losses['dy_off'] = gaussians.compute_dynamic_offset_loss() * opt.lambda_dynamic_offset
+                if opt.lambda_scale != 0:
+                    if opt.metric_scale:
+                        if n_visible > 0:
+                            losses['scale'] = F.relu(gaussians.get_scaling[visibility_filter] - opt.threshold_scale).norm(dim=1).mean() * opt.lambda_scale
+                        else:
+                            losses['scale'] = torch.zeros((), device=gaussians._xyz.device)
+                    else:
+                        # losses['scale'] = F.relu(gaussians._scaling).norm(dim=1).mean() * opt.lambda_scale
+                        if n_visible > 0:
+                            losses['scale'] = F.relu(torch.exp(gaussians._scaling[visibility_filter]) - opt.threshold_scale).norm(dim=1).mean() * opt.lambda_scale
+                        else:
+                            losses['scale'] = torch.zeros((), device=gaussians._xyz.device)
 
-            if opt.lambda_dynamic_offset_std != 0:
-                ti = viewpoint_cam.timestep
-                t_indices =[ti]
-                if ti > 0:
-                    t_indices.append(ti-1)
-                if ti < gaussians.num_timesteps - 1:
-                    t_indices.append(ti+1)
-                losses['dynamic_offset_std'] = gaussians.flame_param['dynamic_offset'].std(dim=0).mean() * opt.lambda_dynamic_offset_std
-        
-            if opt.lambda_laplacian != 0:
-                losses['lap'] = gaussians.compute_laplacian_loss() * opt.lambda_laplacian
-        
-        losses['total'] = sum([v for k, v in losses.items()])
-        losses['total'].backward()
+                if opt.lambda_dynamic_offset != 0:
+                    losses['dy_off'] = gaussians.compute_dynamic_offset_loss() * opt.lambda_dynamic_offset
+
+                if opt.lambda_dynamic_offset_std != 0:
+                    ti = viewpoint_cam.timestep
+                    t_indices =[ti]
+                    if ti > 0:
+                        t_indices.append(ti-1)
+                    if ti < gaussians.num_timesteps - 1:
+                        t_indices.append(ti+1)
+                    losses['dynamic_offset_std'] = gaussians.flame_param['dynamic_offset'].std(dim=0).mean() * opt.lambda_dynamic_offset_std
+
+                if opt.lambda_laplacian != 0:
+                    losses['lap'] = gaussians.compute_laplacian_loss() * opt.lambda_laplacian
+
+                # HairAvatars: regularize the strand offset Delta_j(t) = static_j + dynamic_j(t)
+                if gaussians.enable_hair_strands and gaussians.strand_delta_cumsum is not None:
+                    # Under enable_inextensible_chain (v2), ||static_j||/||dynamic_j(t)|| < cap always
+                    # by construction (sigmoid-gated magnitude) -- the ReLU-threshold penalty below has
+                    # no job left to do (it would always evaluate to ~0 if cap<=threshold, and
+                    # gaussians._strand_delta_static/_dynamic don't even exist as tensors in this mode),
+                    # so skip it entirely rather than keep a redundant/dead loss term.
+                    if not gaussians.enable_inextensible_chain and gaussians._strand_delta_static is not None:
+                        if opt.lambda_strand_static != 0:
+                            losses['strand_static'] = F.relu(
+                                gaussians._strand_delta_static.norm(dim=-1) - opt.threshold_strand_static
+                            ).mean() * opt.lambda_strand_static
+                        if opt.lambda_strand_dynamic != 0 and gaussians._strand_delta_dynamic is not None:
+                            # sparsity on the time-varying residual: prefer the static explanation (Occam's razor),
+                            # only let dynamic_j(t) grow when the static offset alone cannot explain the data
+                            losses['strand_dynamic'] = F.relu(
+                                gaussians._strand_delta_dynamic.norm(dim=-1) - opt.threshold_strand_dynamic
+                            ).mean() * opt.lambda_strand_dynamic
+                    if opt.lambda_strand_coherence != 0:
+                        # C2: Strand-Coherence Regularization — relative rigidity between adjacent chain links
+                        losses['strand_coherence'] = gaussians.compute_strand_coherence_loss(
+                            opt.threshold_strand_coherence
+                        ) * opt.lambda_strand_coherence
+                    if gaussians.enable_strand_rotation and gaussians._strand_rotation_static is not None \
+                            and opt.lambda_strand_rotation != 0:
+                        # chain-propagated rotation: penalize per-link axis-angle magnitude beyond threshold
+                        losses['strand_rotation'] = F.relu(
+                            gaussians._strand_rotation_static.norm(dim=-1) - opt.threshold_strand_rotation
+                        ).mean() * opt.lambda_strand_rotation
+
+            losses['total'] = sum([v for k, v in losses.items()])
+            # scale by 1/grad_accum_steps so accumulated .grad matches the mean-of-batch gradient
+            # (PyTorch accumulates gradients additively across backward() calls by default)
+            (losses['total'] / grad_accum_steps).backward()
+
+            # Densification stats: accumulate per sub-step, same as each view would contribute
+            # independently under true batching.
+            if iteration < opt.densify_until_iter:
+                gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
+                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
         iter_end.record()
 
@@ -180,6 +253,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     postfix["lap"] = f"{losses['lap']:.{7}f}"
                 if 'dynamic_offset_std' in losses:
                     postfix["dynamic_offset_std"] = f"{losses['dynamic_offset_std']:.{7}f}"
+                if 'strand_static' in losses:
+                    postfix["strand_s"] = f"{losses['strand_static']:.{7}f}"
+                if 'strand_dynamic' in losses:
+                    postfix["strand_d"] = f"{losses['strand_dynamic']:.{7}f}"
+                if 'strand_coherence' in losses:
+                    postfix["strand_c"] = f"{losses['strand_coherence']:.{7}f}"
+                if 'strand_rotation' in losses:
+                    postfix["strand_r"] = f"{losses['strand_rotation']:.{7}f}"
                 progress_bar.set_postfix(postfix)
                 progress_bar.update(10)
             if iteration == opt.iterations:
@@ -191,18 +272,18 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
-            # Densification
+            # Densification (stats already accumulated per sub-step in the render loop above)
             if iteration < opt.densify_until_iter:
-                # Keep track of max radii in image-space for pruning
-                gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
-
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
+
+            # HairAvatars: periodic nearest-triangle rebinding for hair-region Gaussians (opt-in)
+            if getattr(gaussians, 'enable_rebinding', False) and iteration % opt.rebinding_interval == 0:
+                gaussians.rebind_hair_gaussians()
 
             # Optimizer step
             if iteration < opt.iterations:
@@ -329,6 +410,10 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
+    parser.add_argument("--num_workers", type=int, default=8,
+                         help="DataLoader worker processes for the training loop. Lower this (e.g. 2-3) "
+                              "when running multiple training jobs in parallel on a shared machine to "
+                              "reduce total CPU footprint.")
     args = parser.parse_args(sys.argv[1:])
     if args.interval > op.iterations:
         args.interval = op.iterations // 5
@@ -347,7 +432,7 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.num_workers)
 
     # All done
     print("\nTraining complete.")

@@ -105,7 +105,19 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
     with torch.no_grad():
         if dataset.bind_to_mesh:
             # gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset)
-            gaussians = FlameGaussianModel(dataset.sh_degree)
+            # getattr(..., default) here: checkpoints saved before hair-strand support was added
+            # have no such fields in their cfg_args, so dataset won't carry these attributes.
+            gaussians = FlameGaussianModel(dataset.sh_degree,
+                                            enable_hair_strands=getattr(dataset, 'enable_hair_strands', False),
+                                            strand_json_path=getattr(dataset, 'strand_json_path', ''),
+                                            disable_strand_dynamic=getattr(dataset, 'disable_strand_dynamic', False),
+                                            enable_motion_gate=getattr(dataset, 'enable_motion_gate', False),
+                                            motion_gate_percentile=getattr(dataset, 'motion_gate_percentile', 90.0),
+                                            enable_strand_rotation=getattr(dataset, 'enable_strand_rotation', False),
+                                            enable_rebinding=getattr(dataset, 'enable_rebinding', False),
+                                            enable_inextensible_chain=getattr(dataset, 'enable_inextensible_chain', False),
+                                            inextensible_static_cap=getattr(dataset, 'inextensible_static_cap', 0.3),
+                                            inextensible_dynamic_cap=getattr(dataset, 'inextensible_dynamic_cap', 0.05))
         else:
             gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
