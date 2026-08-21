@@ -222,7 +222,27 @@ sequential, budget accordingly).
 
 ## A. Optical-flow / temporal supervision
 
-### A-0. Flow-quality check (no training-code changes)
+### A-0. Flow-quality check (no training-code changes) — DONE, verdict: GO
+
+Ran torchvision's pretrained RAFT-Large on same-camera adjacent-timestep GT pairs (264, 304, 218),
+masked to the FLAME-hair-landmark bbox already used by `precise_hair_crop_eval.py`. Script:
+`optical_flow_check.py`.
+
+| Subject | hair flow (px) | bg flow (px) | hair fwd-bwd err | bg fwd-bwd err | hair/bg ratio |
+|---|---|---|---|---|---|
+| 264 | 2.17 | 0.88 | 0.245 | 0.640 | 0.38 |
+| 304 | 6.42 | 2.83 | 1.089 | 0.845 | 1.29 |
+| 218 | 2.69 | 1.64 | 0.150 | 1.050 | 0.14 |
+
+Flow fields are visually smooth (no salt-and-pepper noise) with a clear hair/background boundary in
+all three subjects (see `flow_vis_*.png`). Forward-backward consistency is actually *better* in the
+hair region than the background for 264 and 218; only 304 (the known anomaly) shows a mildly worse
+ratio (1.29x), weak but not decisive corroboration for the FLAME-tracking-noise hypothesis. Overall:
+RAFT flow in the hair region is reliable enough to use as supervision — proceed to A-1/A-2.
+
+<details>
+<summary>original A-0 plan (superseded by the result above)</summary>
+
 
 - Subjects: 264 (highest peakiness, best motion-gate result), 304 (2nd-highest peakiness, worst
   motion-gate result — unexplained anomaly), 218 (low peakiness, 2nd-best result). Reuse peakiness
@@ -237,6 +257,8 @@ sequential, budget accordingly).
   if 304's hair-region flow error is anomalously high relative to the other 8 subjects, that's
   corroborating (not conclusive) evidence.
 - **Gate**: proceed to A-2 only if flow is structured/low-error in the hair region.
+
+</details>
 
 ### A-1. Temporal-smoothness-only ablation (no RAFT, no dataloader change)
 
