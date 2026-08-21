@@ -213,6 +213,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             losses['strand_dynamic'] = F.relu(
                                 gaussians._strand_delta_dynamic.norm(dim=-1) - opt.threshold_strand_dynamic
                             ).mean() * opt.lambda_strand_dynamic
+                        if opt.lambda_strand_temporal_smooth != 0 and gaussians._strand_delta_dynamic is not None:
+                            # A-1: does *any* temporal coupling on the dynamic residual help, given it
+                            # currently has none (epsilon(t) and epsilon(t-1) are fully independent)?
+                            # Cheap diagnostic before investing in real motion supervision (optical flow).
+                            losses['strand_temporal_smooth'] = gaussians.compute_strand_temporal_smoothness_loss() \
+                                * opt.lambda_strand_temporal_smooth
                     if opt.lambda_strand_coherence != 0:
                         # C2: Strand-Coherence Regularization — relative rigidity between adjacent chain links
                         losses['strand_coherence'] = gaussians.compute_strand_coherence_loss(
@@ -261,6 +267,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     postfix["strand_c"] = f"{losses['strand_coherence']:.{7}f}"
                 if 'strand_rotation' in losses:
                     postfix["strand_r"] = f"{losses['strand_rotation']:.{7}f}"
+                if 'strand_temporal_smooth' in losses:
+                    postfix["strand_ts"] = f"{losses['strand_temporal_smooth']:.{7}f}"
                 progress_bar.set_postfix(postfix)
                 progress_bar.update(10)
             if iteration == opt.iterations:

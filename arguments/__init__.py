@@ -136,6 +136,7 @@ class OptimizationParams(ParamGroup):
         self.lambda_strand_dynamic = 1e-1    # sparsity on the time-varying residual (Occam's razor: prefer static explanation)
         self.threshold_strand_dynamic = 0.05
         self.lambda_strand_coherence = 1e-2  # relative rigidity: penalize ||Delta_j - Delta_{j-1}|| between adjacent chain links
+        self.lambda_strand_temporal_smooth = 0.  # A-1: penalize ||epsilon_j(t)-epsilon_j(t-1)||^2, off by default
         self.threshold_strand_coherence = 0.1
 
         # HairAvatars: chain-propagated strand rotation (axis-angle per link, composed via quaternion

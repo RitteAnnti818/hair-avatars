@@ -426,6 +426,26 @@ class FlameGaussianModel(GaussianModel):
             return cumsum.new_zeros(())
         return penalty.mean()
 
+    def compute_strand_temporal_smoothness_loss(self):
+        """A-1: penalize ||epsilon_j(t) - epsilon_j(t-1)||^2 for the dynamic term, across all
+        timesteps at once. Unlike the coherence loss above (which operates on strand_delta_cumsum,
+        the per-frame forward output), this reads _strand_delta_dynamic directly -- it's a plain
+        learned parameter table indexed by t, so this doesn't need a paired-frame dataloader or any
+        rendering pass, just the tensor itself. Cheap diagnostic for whether *any* temporal coupling
+        helps the dynamic term (which currently has none -- epsilon(t) and epsilon(t-1) are entirely
+        independent free parameters), before investing in real motion supervision (optical flow)."""
+        eps = self._strand_delta_dynamic  # (num_strands, max_chain_len, num_timesteps, 3)
+        if eps is None or eps.shape[2] < 2:
+            return eps.new_zeros(()) if eps is not None else torch.zeros((), device="cuda")
+        diff = eps[:, :, 1:, :] - eps[:, :, :-1, :]  # (num_strands, max_chain_len, T-1, 3)
+        link_idx = torch.arange(eps.shape[1], device=eps.device)[None, :]  # (1, L)
+        valid = link_idx < self.strand_chain_len[:, None]  # (num_strands, L): same padding mask as coherence loss
+        sq_err = diff.pow(2).sum(dim=-1)  # (num_strands, L, T-1)
+        sq_err = sq_err[valid]  # (num_valid_links, T-1)
+        if sq_err.numel() == 0:
+            return eps.new_zeros(())
+        return sq_err.mean()
+
     def update_mesh_properties(self, verts, verts_cano):
         faces = self.flame_model.faces
         triangles = verts[:, faces]
