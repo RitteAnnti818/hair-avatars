@@ -115,6 +115,30 @@ def sample_flow_at(flow, pixels):
     return sampled[0, :, :, 0].transpose(0, 1)  # (N, 2)
 
 
+def hair_xyz_offset_only(gaussians, hair_mask):
+    """Same math as GaussianModel.get_xyz, but with the rigid/pose-dependent factors (face_orien_mat,
+    face_scaling, face_center, and the per-Gaussian raw _xyz) detached, keeping gradient live only
+    through strand_delta_cumsum (the actual thing this loss is meant to supervise). Using the plain
+    get_xyz here would let the flow loss's gradient also push on FLAME pose (rotation/neck_pose/
+    jaw_pose/translation are all trainable) for both sampled timesteps -- a noisy, low-frequency
+    auxiliary signal destabilizing a fit that's normally driven by the much more reliable per-frame
+    photometric loss. Restricting the gradient path to the strand offset matches the original design
+    (project Delta_j(t+1) - Delta_j(t), not the full position)."""
+    binding = gaussians.binding[hair_mask]
+    orien = gaussians.face_orien_mat[binding].detach()
+    scaling = gaussians.face_scaling[binding].detach()
+    center = gaussians.face_center[binding].detach()
+    local_xyz = gaussians._xyz[hair_mask].detach()
+
+    rigid = torch.bmm(orien, local_xyz[..., None]).squeeze(-1) * scaling + center
+
+    strand_id = gaussians.face_strand_id[binding]
+    chain_pos = gaussians.face_chain_pos[binding]
+    local_delta = gaussians.strand_delta_cumsum[strand_id.clamp(min=0), chain_pos]  # (M, 3), gradient live
+    global_delta = torch.bmm(orien, local_delta[..., None]).squeeze(-1) * scaling
+    return rigid + global_delta
+
+
 def compute_flow_supervision_loss(gaussians, cam_a, cam_b, flow_cache, min_confidence=0.3):
     """cam_a, cam_b: Camera objects for the same camera at adjacent timesteps t, t+1. Returns a
     scalar loss (or None if no valid hair Gaussians / image pair available)."""
@@ -123,9 +147,9 @@ def compute_flow_supervision_loss(gaussians, cam_a, cam_b, flow_cache, min_confi
         return None
 
     gaussians.select_mesh_by_timestep(cam_a.timestep)
-    xyz_a = gaussians.get_xyz[hair_mask]
+    xyz_a = hair_xyz_offset_only(gaussians, hair_mask)
     gaussians.select_mesh_by_timestep(cam_b.timestep)
-    xyz_b = gaussians.get_xyz[hair_mask]
+    xyz_b = hair_xyz_offset_only(gaussians, hair_mask)
 
     px_a = project_points_to_pixels(xyz_a, cam_a)  # (M, 2), differentiable w.r.t. strand params
     px_b = project_points_to_pixels(xyz_b, cam_b)
