@@ -8,6 +8,7 @@ on the GT video (RAFT, cached lazily per (subject, camera, t) the first time it'
 Does not touch train.py's main shuffle=True single-frame loop -- this is meant to be called as a
 low-frequency auxiliary step (e.g. every N iterations), on top of the existing photometric training.
 """
+import os
 from pathlib import Path
 import numpy as np
 import torch
@@ -65,10 +66,15 @@ class FlowCache:
             return self._mem_cache[key]
         cache_path = Path(CACHE_DIR, self.subject, key + ".npz")
         if cache_path.exists():
-            d = np.load(cache_path)
-            flow, conf = torch.from_numpy(d["flow"]), torch.from_numpy(d["conf"])
-            self._mem_cache[key] = (flow, conf)
-            return flow, conf
+            try:
+                d = np.load(cache_path)
+                flow, conf = torch.from_numpy(d["flow"]), torch.from_numpy(d["conf"])
+                self._mem_cache[key] = (flow, conf)
+                return flow, conf
+            except Exception:
+                # another process was still writing this file (parallel runs on the same subject
+                # share the cache dir) -- fall through and just recompute instead of crashing.
+                pass
 
         self._ensure_raft()
         img_a, img_b = self._load_img(img_path_a), self._load_img(img_path_b)
@@ -88,7 +94,12 @@ class FlowCache:
                   (flow_fwd[1] + flow_bwd[1][sample_y, sample_x]) ** 2).sqrt()
         conf = 1.0 / (1.0 + fb_err)  # in (0, 1], higher = more trustworthy
 
-        np.savez(cache_path, flow=flow_fwd.numpy(), conf=conf.numpy())
+        # atomic write: parallel runs on the same subject share this cache dir, and np.savez isn't
+        # atomic on its own -- write to a per-process temp file, then os.replace() (atomic on POSIX)
+        # so a concurrent reader never sees a partially-written file.
+        tmp_path = cache_path.with_suffix(f".{os.getpid()}.tmp.npz")
+        np.savez(tmp_path, flow=flow_fwd.numpy(), conf=conf.numpy())
+        os.replace(tmp_path, cache_path)
         self._mem_cache[key] = (flow_fwd, conf)
         return flow_fwd, conf
 
