@@ -148,3 +148,4 @@ dev/hair_avatars/videos/
 dev/hair_avatars/qual_videos/
 *.csv
 *.out
+dev/hair_avatars/flow_cache/
