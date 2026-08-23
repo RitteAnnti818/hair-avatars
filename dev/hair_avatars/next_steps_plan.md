@@ -347,6 +347,29 @@ next: check it isn't a 306-specific fluke before reading too much into it.
 **Next**: validate on 264/304/218 (same spread used in A-0) at lambda_flow=0.2 before rolling out to
 all 9 subjects.
 
+**Validation result (2026-08-24): mixed, not a clean win.** Naive-dynamic-only re-measured cleanly on
+FREE for all three (own control, not reusing older numbers) vs. + flow lambda=0.2:
+
+| Subject | naive dynamic | + flow (lambda=0.2) | flow's effect |
+|---|---|---|---|
+| 306 | -0.186dB | +0.083dB | +0.269dB |
+| 264 | +0.094dB | -0.103dB | -0.197dB |
+| 304 | -0.502dB | -0.656dB | -0.154dB |
+| 218 | -0.063dB | +0.082dB | +0.145dB |
+
+2/4 improved (306, 218), 2/4 got worse (264, 304). Not a universal fix. But the direction of the effect
+lines up with A-0's flow-quality numbers in 3/4 cases: 218 (best hair/bg fwd-bwd ratio, 0.14) improved
+most; 304 (worst ratio, 1.29, the known tracking-noise-suspect subject) got worse; 264 is the exception
+-- flow quality there wasn't bad (0.38) but naive-dynamic-alone was *already* positive on 264, and
+adding flow supervision on top of an already-working fit made it worse rather than better.
+
+Working hypothesis: flow supervision helps where the underlying flow signal is trustworthy and the
+naive dynamic term isn't already doing fine on its own; it actively hurts when either condition fails.
+Plausible next steps before a 9-subject rollout: gate/scale lambda_flow by the subject's own A-0-style
+flow-quality metric instead of a fixed value, or only apply the flow loss where naive-dynamic-only is
+already negative (i.e. only "rescue" subjects that need it, leave already-fine ones alone). Not done
+yet -- next session.
+
 ---
 
 ## Sequencing

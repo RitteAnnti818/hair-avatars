@@ -151,6 +151,37 @@ SUBJECTS = {
         base_dir=f"{PROJECT}/output/free60k_baseline_306/test/ours_60000",
         hair_dir=f"{PROJECT}/output/a2_flow_lam10_306_FREE/test/ours_60000",
     ),
+    # A-2 validation: lambda_flow=0.2 vs naive-dynamic-only clean baseline, 264/304/218
+    "264_a1_naive": dict(
+        data_dir=f"{PROJECT}/data/264_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_264/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a1_naive_dynamic_264_FREE/test/ours_60000",
+    ),
+    "264_a2_lam02": dict(
+        data_dir=f"{PROJECT}/data/264_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_264/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a2_flow_lam02_264_FREE/test/ours_60000",
+    ),
+    "304_a1_naive": dict(
+        data_dir=f"{PROJECT}/data/304_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_304/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a1_naive_dynamic_304_FREE/test/ours_60000",
+    ),
+    "304_a2_lam02": dict(
+        data_dir=f"{PROJECT}/data/304_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_304/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a2_flow_lam02_304_FREE/test/ours_60000",
+    ),
+    "218_a1_naive": dict(
+        data_dir=f"{PROJECT}/data/218_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_218/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a1_naive_dynamic_218_FREE/test/ours_60000",
+    ),
+    "218_a2_lam02": dict(
+        data_dir=f"{PROJECT}/data/218_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_218/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a2_flow_lam02_218_FREE/test/ours_60000",
+    ),
     # threshold_strand_coherence sweep on 306 (default 0.1 regressed badly; testing looser values)
     "306_th015": dict(
         data_dir=f"{PROJECT}/data/UNION10_306_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
