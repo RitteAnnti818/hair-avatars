@@ -26,6 +26,9 @@ from utils.image_utils import psnr, error_map
 from lpipsPyTorch import lpips
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+import random
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "dev", "hair_avatars"))
+import flow_supervision
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -62,6 +65,26 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     loader_camera_train = DataLoader(scene.getTrainCameras(), batch_size=None, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=(num_workers > 0))
     iter_camera_train = iter(loader_camera_train)
+
+    # A-2: build a (camera_idx, timestep) -> Camera lookup once, so the auxiliary flow step can find
+    # the same-camera t+1 frame for whichever camera/timestep it samples. Doesn't touch the main
+    # shuffle=True loop above at all.
+    flow_cache = None
+    flow_cam_lookup = {}
+    flow_cam_keys = []
+    if dataset.enable_flow_supervision:
+        # .cameras (not the CameraDataset wrapper) -- avoids the wrapper's __getitem__, which
+        # deepcopies and fully decodes+resizes the image on every access (fine for the main
+        # shuffle=True loop's one-image-at-a-time usage, very slow -- ~7min for 2730 cameras --
+        # for this metadata-only pass). full_proj_transform/image_width/height/timestep/image_name
+        # are all set eagerly in Camera.__init__, no decode needed to read them.
+        for cam in scene.getTrainCameras().cameras:
+            cam_idx = int(cam.image_name.split("_")[1])
+            flow_cam_lookup[(cam_idx, cam.timestep)] = cam
+        # only keep keys that have a same-camera t+1 partner
+        flow_cam_keys = [(c, t) for (c, t) in flow_cam_lookup if (c, t + 1) in flow_cam_lookup]
+        flow_cache = flow_supervision.FlowCache(subject=os.path.basename(dataset.source_path), gt_dir=dataset.source_path)
+        print(f"[HairAvatars] flow supervision enabled: {len(flow_cam_keys)} adjacent-pair candidates")
     # viewpoint_stack = None
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
@@ -132,6 +155,18 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             except StopIteration:
                 iter_camera_train = iter(loader_camera_train)
                 viewpoint_cam = next(iter_camera_train)
+
+            # A-2: auxiliary cross-frame flow loss, low frequency, only on the first sub-step of an
+            # iteration. Runs its own pair of select_mesh_by_timestep calls -- the main photometric
+            # select_mesh_by_timestep call right below always re-selects the correct state for
+            # viewpoint_cam afterward, so this can't leak into the photometric render.
+            flow_loss = None
+            if (flow_cache is not None and _sub_step == 0
+                    and iteration % dataset.flow_every_n_iters == 0 and len(flow_cam_keys) > 0):
+                cam_idx, t = random.choice(flow_cam_keys)
+                cam_a, cam_b = flow_cam_lookup[(cam_idx, t)], flow_cam_lookup[(cam_idx, t + 1)]
+                flow_loss = flow_supervision.compute_flow_supervision_loss(
+                    gaussians, cam_a, cam_b, flow_cache, min_confidence=dataset.flow_min_confidence)
 
             if gaussians.binding != None:
                 gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)
@@ -231,6 +266,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             gaussians._strand_rotation_static.norm(dim=-1) - opt.threshold_strand_rotation
                         ).mean() * opt.lambda_strand_rotation
 
+            if flow_loss is not None:
+                losses['flow'] = flow_loss * opt.lambda_flow
+
             losses['total'] = sum([v for k, v in losses.items()])
             # scale by 1/grad_accum_steps so accumulated .grad matches the mean-of-batch gradient
             # (PyTorch accumulates gradients additively across backward() calls by default)
@@ -269,6 +307,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     postfix["strand_r"] = f"{losses['strand_rotation']:.{7}f}"
                 if 'strand_temporal_smooth' in losses:
                     postfix["strand_ts"] = f"{losses['strand_temporal_smooth']:.{7}f}"
+                if 'flow' in losses:
+                    postfix["flow"] = f"{losses['flow']:.{7}f}"
                 progress_bar.set_postfix(postfix)
                 progress_bar.update(10)
             if iteration == opt.iterations:

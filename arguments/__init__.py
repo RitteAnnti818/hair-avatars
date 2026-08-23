@@ -80,6 +80,9 @@ class ModelParams(ParamGroup):
                                                 # the clamp isn't wired correctly)
         self.inextensible_dynamic_cap = 0.05   # hard cap on ||dynamic delta|| (applied before the motion gate);
                                                 # matches threshold_strand_dynamic by default
+        self.enable_flow_supervision = False  # A-2: opt-in cross-frame optical-flow consistency loss
+        self.flow_every_n_iters = 10  # low-frequency auxiliary step, on top of the normal photometric loop
+        self.flow_min_confidence = 0.3  # skip pixels below this RAFT forward-backward confidence
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -137,6 +140,7 @@ class OptimizationParams(ParamGroup):
         self.threshold_strand_dynamic = 0.05
         self.lambda_strand_coherence = 1e-2  # relative rigidity: penalize ||Delta_j - Delta_{j-1}|| between adjacent chain links
         self.lambda_strand_temporal_smooth = 0.  # A-1: penalize ||epsilon_j(t)-epsilon_j(t-1)||^2, off by default
+        self.lambda_flow = 1e-2  # A-2: weight on the projected cross-frame flow-consistency loss
         self.threshold_strand_coherence = 0.1
 
         # HairAvatars: chain-propagated strand rotation (axis-angle per link, composed via quaternion
