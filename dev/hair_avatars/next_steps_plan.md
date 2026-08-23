@@ -311,6 +311,42 @@ was re-measured cleanly on the same FREE protocol as everything else in this doc
 5. Tune $\lambda_{flow}$ on 306 alone first (same convention as the existing `threshold_strand_coherence`
    sweep), then run all 9 if it looks promising.
 
+**IMPLEMENTED (2026-08-23) — first genuine positive result on the dynamic term, after fixing a real
+bug.** `dev/hair_avatars/flow_supervision.py`: lazy-cached RAFT flow per (subject, camera, t)
+(atomic-write cache, safe for parallel runs on the same subject), project hair Gaussians at t and
+t+1 into camera pixel space via `full_proj_transform`, compare to cached flow with RAFT
+forward-backward confidence weighting. Runs as a low-frequency auxiliary step (`flow_every_n_iters`,
+default 10) layered on top of the untouched `shuffle=True` loop.
+
+**Bug found and fixed before the result was trustworthy**: the first version projected
+`gaussians.get_xyz` directly, which is differentiable through the *entire* rigid position
+(`face_orien_mat`/`face_scaling`/`face_center`, all derived from trainable FLAME pose params) as well
+as the strand offset. So every flow step also nudged `rotation`/`neck_pose`/`jaw_pose`/`translation`
+for whichever two timesteps got sampled — a noisy, low-frequency signal fighting the much more
+reliable per-frame photometric pose fit. Result before the fix, naive dynamic on 306: cap-free
+baseline -0.186dB, then -0.365 / -0.507 / -0.773dB as lambda_flow went 0.05 / 0.2 / 1.0 — monotonically
+*worse* with more supervision, a clear tell something was fighting the loss rather than helping it.
+Fix: `hair_xyz_offset_only()` detaches everything except `strand_delta_cumsum` before projecting, so
+gradient reaches only the strand offset (verified directly: grad on `rotation`/`neck_pose`/`_xyz` is
+exactly `None` after the fix, only `_strand_delta_static` gets one).
+
+**Result after the fix, same sweep, naive dynamic on 306:**
+
+| lambda_flow | PSNR delta | better-frames |
+|---|---|---|
+| 0 (A-1 baseline) | -0.186dB | 35.4% |
+| 0.05 | -0.038dB | 48.2% |
+| **0.2** | **+0.083dB** | **57.1%** |
+| 1.0 | +0.049dB | 57.1% |
+
+lambda_flow=0.2 is the first dynamic-term intervention in this project's entire history (motion gate,
+K/threshold/rotation sweeps, all of B's norm-cap variants, A-1's blind smoothing) that beats the rigid
+baseline outright, not just "less bad than some other dynamic variant." Single subject, single seed --
+next: check it isn't a 306-specific fluke before reading too much into it.
+
+**Next**: validate on 264/304/218 (same spread used in A-0) at lambda_flow=0.2 before rolling out to
+all 9 subjects.
+
 ---
 
 ## Sequencing
