@@ -278,7 +278,24 @@ New flag/weight `lambda_strand_temporal_smooth`, added to the total objective al
 `lambda_strand_coherence`. Sweep on 2-3 subjects (e.g. 306, 264, 304) first — cheapest possible signal on
 whether *any* temporal coupling helps, independent of A-0's outcome.
 
-### A-2. Full flow-consistency loss (gated on A-0 passing + remaining time)
+**DONE, verdict: doesn't help, makes it worse.** Ran on subject 306, FREE sequence:
+
+| variant | PSNR delta | better-frames |
+|---|---|---|
+| naive dynamic, no smoothing (fresh clean baseline on FREE) | -0.186dB | 35.4% |
+| naive dynamic + temporal smoothness (lambda=0.1) | -0.295dB | 30.8% |
+
+Adding smoothness makes it *worse*, not better. So "any temporal coupling helps" is rejected --
+blind smoothing with no real motion signal just fights the photometric objective. This actually
+strengthens the case for A-2: it's not that epsilon(t) needs *some* structure, it's that it needs the
+*right* structure (real motion direction), which only actual flow supervision can provide.
+
+Side note: the naive-dynamic baseline measured here (-0.186dB) doesn't match the older -0.004dB figure
+for the same ablation in `method_equations.md` -- that number was very likely measured under a
+different protocol (probably the UNION10 dataset, not FREE), not directly comparable. Good thing this
+was re-measured cleanly on the same FREE protocol as everything else in this doc, rather than reused.
+
+### A-2. Full flow-consistency loss (gated on A-0 passing + remaining time) — A-0 passed, ready to start
 
 1. Offline: cache RAFT flow per subject/frame/camera within hair mask (`.npy`, same crop geometry as
    `precise_hair_crop_eval.py` already computes).

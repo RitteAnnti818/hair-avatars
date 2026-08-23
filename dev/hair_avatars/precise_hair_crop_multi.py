@@ -124,6 +124,17 @@ SUBJECTS = {
         base_dir=f"{PROJECT}/output/free60k_baseline_302/test/ours_60000",
         hair_dir=f"{PROJECT}/output/inextv2_302_FREE/test/ours_60000",
     ),
+    # A-1: naive dynamic (unconditional, no motion gate) with vs without temporal-smoothness loss, 306
+    "306_a1_naive": dict(
+        data_dir=f"{PROJECT}/data/306_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_306/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a1_naive_dynamic_306_FREE/test/ours_60000",
+    ),
+    "306_a1_smooth": dict(
+        data_dir=f"{PROJECT}/data/306_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
+        base_dir=f"{PROJECT}/output/free60k_baseline_306/test/ours_60000",
+        hair_dir=f"{PROJECT}/output/a1_smooth_306_FREE/test/ours_60000",
+    ),
     # threshold_strand_coherence sweep on 306 (default 0.1 regressed badly; testing looser values)
     "306_th015": dict(
         data_dir=f"{PROJECT}/data/UNION10_306_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine",
