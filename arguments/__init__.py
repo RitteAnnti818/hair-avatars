@@ -66,6 +66,7 @@ class ModelParams(ParamGroup):
         self.enable_motion_gate = False  # opt-in: gate the dynamic strand offset by head-motion magnitude, g(m(t)) in [0,1]
         self.motion_gate_percentile = 90.0  # m_ref = this percentile of per-frame pose velocity over the training sequence
         self.strand_temporal_mode = "none"  # temporal ablation: none | smooth | pose_gate | strand_gate
+        self.strand_dynamic_tip_power = 1.0  # >1 suppresses root/mid dynamic motion and emphasizes tips
         self.enable_strand_rotation = False  # opt-in: chain-propagated per-link rotation (axis-angle), root-fixed ramp like the position chain
         self.enable_rebinding = False  # opt-in: periodically reassign hair-region Gaussians to their nearest hair triangle (lightweight proxy for TeGA-style cross-triangle rebinding), independent of the strand chain
         super().__init__(parser, "Loading Parameters", sentinel)
@@ -119,6 +120,8 @@ class OptimizationParams(ParamGroup):
 
         # HairAvatars: strand-chain soft-rigging, Delta_j(t) = static_j (time-invariant) + dynamic_j(t) (residual)
         self.strand_delta_lr = 1e-3
+        self.strand_dynamic_lr = -1.0  # negative: use strand_delta_lr; positive: separate LR for dynamic residual
+        self.strand_dynamic_warmup_iters = 0  # keep dynamic residual inactive until this iteration
         self.lambda_strand_static = 1e-2     # penalize static offset beyond threshold_strand_static (shape correction, expected to matter)
         self.threshold_strand_static = 0.3
         self.lambda_strand_dynamic = 1e-1    # sparsity on the time-varying residual (Occam's razor: prefer static explanation)

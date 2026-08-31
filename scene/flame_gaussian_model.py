@@ -24,7 +24,7 @@ class FlameGaussianModel(GaussianModel):
     def __init__(self, sh_degree : int, disable_flame_static_offset=False, not_finetune_flame_params=False, n_shape=300, n_expr=100,
                  enable_hair_strands=False, strand_json_path="", disable_strand_dynamic=False,
                  enable_motion_gate=False, motion_gate_percentile=90.0,
-                 strand_temporal_mode="none",
+                 strand_temporal_mode="none", strand_dynamic_tip_power=1.0,
                  enable_strand_rotation=False, enable_rebinding=False):
         super().__init__(sh_degree)
 
@@ -54,6 +54,8 @@ class FlameGaussianModel(GaussianModel):
         self.enable_motion_gate = enable_motion_gate
         self.motion_gate_percentile = motion_gate_percentile
         self.strand_temporal_mode = strand_temporal_mode
+        self.strand_dynamic_tip_power = strand_dynamic_tip_power
+        self.strand_dynamic_active = True
         self.motion_gate_ref = None
         self.last_motion_gate = None  # most recent gate value, exposed for logging/debugging
         self.strand_temporal_gate = None
@@ -346,6 +348,13 @@ class FlameGaussianModel(GaussianModel):
         delta_t = self._strand_delta_static
         if self._strand_delta_dynamic is not None:
             dynamic_t = self._strand_delta_dynamic[:, :, timestep, :]
+            if not self.strand_dynamic_active:
+                dynamic_t = torch.zeros_like(dynamic_t)
+            if self.strand_dynamic_tip_power != 1.0:
+                link_idx_dyn = torch.arange(self.max_chain_len, device=dynamic_t.device).float()[None, :]
+                denom_dyn = (self.strand_chain_len.float() - 1).clamp(min=1)[:, None]
+                dynamic_ramp = (link_idx_dyn / denom_dyn).clamp(0, 1).pow(self.strand_dynamic_tip_power)
+                dynamic_t = dynamic_t * dynamic_ramp[..., None]
             if self.strand_temporal_mode == 'pose_gate' and self.strand_temporal_gate is not None:
                 gate = self._compute_temporal_gate(timestep)
                 if gate is not None:
@@ -454,12 +463,13 @@ class FlameGaussianModel(GaussianModel):
 
         if self.enable_hair_strands and self._strand_delta_static is not None:
             self._strand_delta_static.requires_grad_(True)
-            params = [self._strand_delta_static]
+            param_strand_static = {'params': [self._strand_delta_static], 'lr': training_args.strand_delta_lr, "name": "strand_delta_static"}
+            self.optimizer.add_param_group(param_strand_static)
             if self._strand_delta_dynamic is not None:
                 self._strand_delta_dynamic.requires_grad_(True)
-                params.append(self._strand_delta_dynamic)
-            param_strand = {'params': params, 'lr': training_args.strand_delta_lr, "name": "strand_delta"}
-            self.optimizer.add_param_group(param_strand)
+                dynamic_lr = training_args.strand_dynamic_lr if training_args.strand_dynamic_lr > 0 else training_args.strand_delta_lr
+                param_strand_dynamic = {'params': [self._strand_delta_dynamic], 'lr': dynamic_lr, "name": "strand_delta_dynamic"}
+                self.optimizer.add_param_group(param_strand_dynamic)
 
             if self.strand_temporal_gate is not None:
                 for p in self.strand_temporal_gate.parameters():
@@ -532,6 +542,13 @@ class FlameGaussianModel(GaussianModel):
                 strand_data["rotation_static"] = self._strand_rotation_static.detach().cpu().numpy()
             np.savez(str(strand_path), **strand_data)
 
+            # BUGFIX: the learned temporal gate (pose_gate/strand_gate) was never persisted, so
+            # render.py's freshly-reinitialized (random, untrained) gate silently replaced the
+            # trained one at eval time. Save its weights alongside the strand deltas.
+            if self.strand_temporal_gate is not None:
+                gate_path = Path(path).parent / "temporal_gate.pt"
+                torch.save(self.strand_temporal_gate.state_dict(), str(gate_path))
+
     def load_ply(self, path, **kwargs):
         super().load_ply(path)
 
@@ -557,6 +574,16 @@ class FlameGaussianModel(GaussianModel):
                 print(f"[HairAvatars] restored strand_delta from {strand_path}")
             else:
                 print(f"[HairAvatars] WARNING: {strand_path} not found — strand offsets reset to zero")
+
+            # BUGFIX (see save_ply): restore the trained temporal gate weights instead of leaving
+            # the randomly-initialized one created by load_meshes().
+            if self.strand_temporal_gate is not None:
+                gate_path = Path(path).parent / "temporal_gate.pt"
+                if gate_path.exists():
+                    self.strand_temporal_gate.load_state_dict(torch.load(str(gate_path), map_location="cuda"))
+                    print(f"[HairAvatars] restored temporal_gate from {gate_path}")
+                else:
+                    print(f"[HairAvatars] WARNING: {gate_path} not found — temporal gate left randomly initialized")
         
         if 'motion_path' in kwargs and kwargs['motion_path'] is not None:
             # When there is a motion sequence specified, load only dynamic parameters.

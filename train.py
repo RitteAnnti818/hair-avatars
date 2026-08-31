@@ -39,7 +39,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset, dataset.not_finetune_flame_params,
                                         enable_hair_strands=dataset.enable_hair_strands, strand_json_path=dataset.strand_json_path,
                                         disable_strand_dynamic=dataset.disable_strand_dynamic,
-                                        enable_motion_gate=dataset.enable_motion_gate, motion_gate_percentile=dataset.motion_gate_percentile, strand_temporal_mode=getattr(dataset, 'strand_temporal_mode', 'none'),
+                                        enable_motion_gate=dataset.enable_motion_gate, motion_gate_percentile=dataset.motion_gate_percentile, strand_temporal_mode=getattr(dataset, 'strand_temporal_mode', 'none'), strand_dynamic_tip_power=getattr(dataset, 'strand_dynamic_tip_power', 1.0),
                                         enable_strand_rotation=dataset.enable_strand_rotation,
                                         enable_rebinding=dataset.enable_rebinding)
         mesh_renderer = NVDiffRenderer()
@@ -131,6 +131,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 viewpoint_cam = next(iter_camera_train)
 
             if gaussians.binding != None:
+                gaussians.strand_dynamic_active = iteration > opt.strand_dynamic_warmup_iters
                 gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)
 
             # Render

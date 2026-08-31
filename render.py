@@ -112,6 +112,7 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
                                             strand_json_path=getattr(dataset, 'strand_json_path', ''),
                                             disable_strand_dynamic=getattr(dataset, 'disable_strand_dynamic', False),
                                             enable_motion_gate=getattr(dataset, 'enable_motion_gate', False), strand_temporal_mode=getattr(dataset, 'strand_temporal_mode', 'none'),
+                                            strand_dynamic_tip_power=getattr(dataset, 'strand_dynamic_tip_power', 1.0),
                                             motion_gate_percentile=getattr(dataset, 'motion_gate_percentile', 90.0),
                                             enable_strand_rotation=getattr(dataset, 'enable_strand_rotation', False),
                                             enable_rebinding=getattr(dataset, 'enable_rebinding', False))

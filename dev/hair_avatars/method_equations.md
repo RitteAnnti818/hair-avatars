@@ -89,6 +89,76 @@ directly into $m(t)$ since it's a raw frame-to-frame pose delta) — not yet ver
 | Static-only ($\epsilon \equiv 0$, i.e. $g \equiv 0$) | tested | $+0.281$dB | positive on 8/9 subjects |
 | **Motion-gated dynamic (above)** | **tested, net negative** | $-0.089$dB | $-0.080$dB (2/9 subjects improved) |
 
+<!-- temporal_dynamic_ablation_306_60k_start -->
+
+**Follow-up temporal/dynamic ablation on subject 306 (UNION10 EMO/EXP, 60k, full-image test/SR metrics; updated 2026-08-28).**
+After naive/motion-gated dynamic offsets underperformed, we tested whether the failure is caused by unstructured temporal freedom rather than dynamic motion itself. Reference: `staticonly60k_306` = PSNR 31.033dB, SSIM 0.9589, LPIPS 0.0913.
+
+| Variant | Main change | PSNR | Delta PSNR | SSIM | LPIPS | Status |
+|---|---|---:|---:|---:|---:|---|
+| A | temporal smoothness on dynamic residual | 31.018 | -0.015 | 0.9579 | 0.0930 | tested; not helpful |
+| B | pose-history global gate | 31.045 | +0.012 | 0.9582 | 0.0922 | small gain |
+| C | pose-history strand-wise gate | 31.053 | +0.019 | 0.9587 | 0.0912 | small gain |
+| D | lower dynamic LR (`strand_dynamic_lr=3e-4`) | 31.245 | +0.212 | 0.9591 | 0.0897 | promising |
+| E | intended warm-up (`strand_dynamic_warmup_iters=10000`) | 31.238 | +0.205 | 0.9593 | 0.0893 | invalid as warm-up; training hook was missing during this run |
+| F | tip-biased dynamic (`strand_dynamic_tip_power=2.0`) | 31.297 | +0.264 | 0.9592 | 0.0887 | best recorded |
+| DF | D + F | 31.237 | +0.204 | 0.9590 | 0.0893 | worse than F |
+
+F/DF were re-rendered and re-metriced after the 2026-08-28 `render.py` fix that passes `strand_dynamic_tip_power`, so these full-image metrics are now interpretable. E still needs to be re-trained after `train.py` sets `strand_dynamic_active = iteration > strand_dynamic_warmup_iters` before mesh selection. Current interpretation: the strongest hypothesis is not "dynamic is useless", but "unconstrained dynamic is harmful; root/mid-suppressed, tip-biased dynamic may be useful." Full machine-readable numbers are stored in `final_results_summary.json` under `temporal_dynamic_ablation_306_60k`.
+
+<!-- temporal_dynamic_ablation_306_60k_end -->
+
+<!-- temporal_followup_2026_08_29_start -->
+
+**Follow-up after wiring fixes (2026-08-29, 60k, full-image test/SR metrics).**
+After fixing the warm-up training hook and render-time `strand_dynamic_tip_power` forwarding, we re-tested the most relevant follow-ups. `E_fixed` was re-trained on 306 with `strand_dynamic_warmup_iters=10000`. `F` (`strand_dynamic_tip_power=2.0`) was evaluated on additional subjects.
+
+| Subject | Variant | Static-only PSNR | Variant PSNR | Delta PSNR | SSIM | LPIPS | Takeaway |
+|---|---|---:|---:|---:|---:|---:|---|
+| 306 | E_fixed warm-up | 31.033 | 33.089 | +2.056 | 0.9704 | 0.0809 | strongest 306 result; verify no run-setting confound |
+| 306 | F tip-biased dynamic | 31.033 | 31.297 | +0.264 | 0.9592 | 0.0887 | still positive on 306 |
+| 302 | F tip-biased dynamic | 25.753 | 25.709 | -0.044 | 0.8988 | 0.1458 | not PSNR-positive |
+| 074 | F tip-biased dynamic | 25.933 | 25.896 | -0.037 | 0.8980 | 0.2008 | PSNR drops, LPIPS improves |
+| 304 | F tip-biased dynamic | 25.250 | 25.039 | -0.211 | 0.8625 | 0.1947 | PSNR drops, LPIPS improves slightly |
+
+Updated interpretation: `F` is not yet a globally reliable replacement despite the clean 306 gain. The more surprising result is `E_fixed`; if reproduced, dynamic warm-up may be the better explanation than tip-only dynamic. Next recommended test: run `E_fixed` on 302/074/304 and compare against their static-only baselines before expanding `F` further.
+
+<!-- temporal_followup_2026_08_29_end -->
+
+<!-- warmup_efixed_cross_subject_2026_08_30_start -->
+
+**E_fixed cross-subject check (2026-08-30, 60k, full-image test/SR metrics).**
+After the warm-up hook was fixed, `E_fixed` (`strand_dynamic_warmup_iters=10000`) was evaluated on 302/074/304/306.
+
+| Subject | Static-only PSNR | E_fixed PSNR | Delta PSNR | Static LPIPS | E_fixed LPIPS | Takeaway |
+|---|---:|---:|---:|---:|---:|---|
+| 306 | 31.033 | 33.089 | +2.056 | 0.0913 | 0.0809 | very strong, but subject-specific until explained |
+| 302 | 25.753 | 25.733 | -0.021 | 0.1456 | 0.1465 | not PSNR-positive |
+| 074 | 25.933 | 25.923 | -0.009 | 0.2042 | 0.2009 | PSNR flat/slightly down, LPIPS improves |
+| 304 | 25.250 | 25.028 | -0.222 | 0.1957 | 0.1937 | PSNR down, LPIPS improves |
+
+Updated interpretation: neither `F` nor `E_fixed` is currently a clean universal full-image PSNR improvement across subjects. `E_fixed` is the strongest subject-306 result, but its large gain should be treated as subject-specific until precise hair-crop metrics and qualitative inspection explain it. Next step: evaluate static-only vs F vs E_fixed on precise hair crops for 306/302/074/304.
+
+<!-- warmup_efixed_cross_subject_2026_08_30_end -->
+
+<!-- efixed_5subject_avg_2026_08_31_start -->
+
+**E_fixed 5-subject absolute average (2026-08-31, 60k, full-image test/SR metrics).**
+Requested subjects: 097, 100, 141, 175, 304. This table reports absolute test/SR metrics for `E_fixed` (`strand_dynamic_warmup_iters=10000`), not NVS and not improvement over matched static-only baselines.
+
+| Subject | PSNR | SSIM | LPIPS |
+|---|---:|---:|---:|
+| 097 | 28.221 | 0.9069 | 0.1566 |
+| 100 | 24.698 | 0.9173 | 0.1616 |
+| 141 | 19.163 | 0.8294 | 0.2297 |
+| 175 | 23.467 | 0.9220 | 0.1639 |
+| 304 | 25.083 | 0.8623 | 0.1938 |
+| **Average** | **24.126** | **0.8876** | **0.1811** |
+
+Caveat: this is a mixed-data-condition average. 097/100/141 use VHAP DS4 staticOffset exports, while 175/304 use DS2-0.5x lmkSTAR smooth-offset exports. Treat this as an absolute-performance sanity check, not a clean improvement claim, until matched static-only baselines are trained/evaluated for the same exact source paths.
+
+<!-- efixed_5subject_avg_2026_08_31_end -->
+
 **Dev-sweep: strand count $K$ and magnitude threshold $\tau_{static}$ (static-only, no dynamic term).**
 Tested whether the adopted $K{=}32$, $\tau_{static}{=}0.3$/$\lambda_{static}{=}10^{-2}$ config (already
 chosen via the coherence-threshold sweep) is actually optimal, by trying $K{=}64$ (finer clustering,
